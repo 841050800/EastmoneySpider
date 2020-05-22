@@ -1,0 +1,49 @@
+#b站的接口限制一次只能获取10条实时弹幕
+#如果要不断获取的话，就加一个time.sleep,然后过一段时间发送一个请求就好
+#如果与tkinter搭配还可以做一个弹幕机玩玩。
+
+import requests
+
+
+class Danmu():
+    url = "https://api.live.bilibili.com/ajax/msg"
+    headers = {
+    }
+
+    def __init__(self, roomid, csrf):
+        self.roomid = roomid
+        self.csrf_token = csrf
+        self.csrf = csrf
+
+    def post_it(self):
+        data = {"roomid": self.roomid,
+                "csrf_token": self.csrf_token,
+                "csrf": self.csrf,
+                "visit_id": ""}
+        self.session = requests.Session()                             #b站不用模拟登陆，实际上不用输入也可以
+        self.json_data = self.session.post(url=self.url,
+                                           headers=self.headers,
+                                           data=data).json()
+        print(self.json_data)
+
+    def getDanmu(self):
+        datas = self.json_data['data']['room']
+        for data in datas:
+            try:
+                nickname = data['nickname']
+            except UnicodeEncodeError:  # 这里的原因是print无法打印特殊字符
+                # 虽然有解决方案，但是没必要
+                nickname = "非法字符，无法print"
+            try:
+                text = data['text']
+            except UnicodeEncodeError:
+                text = "非法字符，无法print"
+            print("{} :{}".format(nickname, text))
+
+
+if __name__ == '__main__':
+    roomid = "21067393"  # 填写roomid
+    csrf = ""  # 填写csrf
+    danmu = Danmu(roomid, csrf)
+    danmu.post_it()
+    danmu.getDanmu()
