@@ -1,0 +1,79 @@
+#Request URL: http://reportapi.eastmoney.com/report/predic?cb=datatable918018&dyCode=*&pageNo=1&pageSize=50&fields=&beginTime=2018-05-22&endTime=2020-05-22&hyCode=*&gnCode=*&marketCode=*&sort=count%2Cdesc&_=1590117232470
+#这里不需要再下载，直接就在网页的element里便有数据，因此只要想办法获取到这些数据就好
+#用字符串操作、正则表达式去获得、改变格式
+
+import requests, time, random, os
+import pandas as pd
+import re
+import json
+from bs4 import BeautifulSoup
+
+
+def UserAgent():
+    user_agent_list = [
+        'Mozilla/5.0 (Windows NT 6.2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/28.0.1464.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 5.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.16 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 5.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.3319.102 Safari/537.36',
+        'Mozilla/5.0 (X11; CrOS i686 3912.101.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/27.0.1453.116 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/27.0.1453.93 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1667.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:17.0) Gecko/20100101 Firefox/17.0.6',
+        'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/28.0.1468.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 5.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2224.3 Safari/537.36',
+        'Mozilla/5.0 (X11; CrOS i686 3912.101.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/27.0.1453.116 Safari/537.36']
+    UserAgent = {'User-Agent': random.choice(user_agent_list)}
+    return UserAgent
+
+def timenow():
+    last_para = int(time.time() * 1000)
+    now = int(time.time())
+    timeArray = time.localtime(now)
+    end_Time = time.strftime("%Y-%m-%d", timeArray)
+    return last_para, end_Time
+
+
+def get_html(i,last_para,end_time,User_Agent):
+    Page_url = 'http://reportapi.eastmoney.com/report/predic?cb=datatable918018&dyCode=*&pageNo={}&pageSize=50&\
+    fields=&beginTime=2018-05-22&endTime={}&hyCode=*&gnCode=*&marketCode=*&sort=count%2Cdesc&_={}'.format(i,last_para,end_time)
+    resp = requests.get(Page_url,timeout=3,headers=User_Agent)
+    return resp.content.decode()
+
+
+def save_data(content):
+    path = 'earning_predict\\' + str(end_time) + '.html'
+    with open(path,'w',encoding='utf-8') as f:
+        f.write(content)
+
+def handle_data(content,i):
+
+    content_ = eval(content[15:])     #根据格式先转化为字典再json读取
+    b = json.dumps(content_, ensure_ascii=False, sort_keys=True, indent=4, separators=(',', ': '))
+
+    predict = pd.DataFrame()
+    pattern = r'(-?)[0-9]*.[0-9]*'
+    Chinese_pattern = r'[\u4e00-\u9fa5]+'
+
+    for j in range(1, 51):
+        predict.at[50 * (i-1) + j - 1, 'stockName'] = re.match(Chinese_pattern, b.split('\"stockName\":')[j][2:6]).group()
+        predict.at[50 * (i-1) + j - 1, 'stockCode'] = b.split('\"stockCode\":')[j][2:8]
+        predict.at[50 * (i-1) + j - 1, 'lastYearEps'] = re.match(pattern, b.split('\"lastYearEps\":')[j][2:8]).group()
+        predict.at[50 * (i-1) + j - 1, 'thisYearEps'] = re.match(pattern, b.split('\"thisYearEps\":')[j][2:8]).group()
+        predict.at[50 * (i-1) + j - 1, 'nextYearEps'] = re.match(pattern, b.split('\"nextYearEps\":')[j][2:8]).group()
+
+    return predict
+
+
+if  __name__ == '__main__':
+
+    predict = pd.DataFrame()
+    for i in range(1, 79):
+        try:
+            last_para, end_time = timenow()
+            print(last_para, end_time)
+            User_Agent = UserAgent()
+            content = get_html(i,last_para,end_time,User_Agent)
+            predict1 = handle_data(content,i)
+            predict = pd.concat([predict,predict1])
+        except AttributeError:
+            print('第{}页数据有问题，很可能是没有预测'.format(i))
+    predict.to_csv('earning_predict\\earning_predict.csv')
