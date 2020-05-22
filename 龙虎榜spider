@@ -1,0 +1,50 @@
+
+import requests, json, time, random
+import pandas as pd
+
+def UserAgent():
+    user_agent_list = [
+        'Mozilla/5.0 (Windows NT 6.2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/28.0.1464.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 5.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.16 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 5.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.3319.102 Safari/537.36',
+        'Mozilla/5.0 (X11; CrOS i686 3912.101.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/27.0.1453.116 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/27.0.1453.93 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1667.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:17.0) Gecko/20100101 Firefox/17.0.6',
+        'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/28.0.1468.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 5.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2224.3 Safari/537.36',
+        'Mozilla/5.0 (X11; CrOS i686 3912.101.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/27.0.1453.116 Safari/537.36']
+    UserAgent = {'User-Agent': random.choice(user_agent_list)}
+    return UserAgent
+
+class longhuSpider():
+    def __init__(self,start,end):
+        self.start = start
+        self.end = end
+
+
+
+    def get_html(self,User_Agent):
+        Page_url = 'http://data.eastmoney.com/DataCenter_V3/stock2016/TradeDetail/pagesize=50,page=1,sortRule=-1,sortType=,startDate={},endDate={},gpfw=0,js=var%20data_tab_2.html? \
+                   rt=26502479'.format(self.start,self.end)
+        resp = requests.get(Page_url,headers=User_Agent)
+        return resp.content.decode('gb2312')
+
+
+    def handle_data(self,data):
+        df = pd.DataFrame()
+        d = data[15] + data[31:]
+        d = eval(d)
+
+        df = pd.DataFrame(d['data'])
+        df.to_csv('龙虎榜\\{}_{}.csv'.format(self.start,self.end))
+
+if __name__ == '__main__':
+
+    User_Agent = UserAgent()
+    longhuspider = longhuSpider('2020-05-22','2020-05-22')
+    r = longhuspider.get_html(User_Agent)
+    longhuspider.handle_data(r)
+
+# 实际使用时参照字段再将要用的数据取出来，Dataframe命名好就行。
+# 因为数据本来就不多，所以就不多页爬取了。实际上往往也没有100条。直接改pagesize即可了。
