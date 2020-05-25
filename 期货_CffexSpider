@@ -1,0 +1,133 @@
+import requests
+import datetime
+import re
+import random
+import pandas as pd
+import sqlite3
+
+#http://www.cffex.com.cn/sj/hqsj/rtj/202005/21/index.xml?id=5
+
+#自己做的时候不可能只用一天的数据，所以要先获取一个交易日的数据，再做循环
+'''
+import tushare as ts
+api = ts.pro_api('')
+trade_day = api.trade_cal()
+'''
+
+
+def UserAgent():
+    user_agent_list = [
+        'Mozilla/5.0 (Windows NT 6.2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/28.0.1464.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 5.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.16 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 5.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.3319.102 Safari/537.36',
+        'Mozilla/5.0 (X11; CrOS i686 3912.101.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/27.0.1453.116 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/27.0.1453.93 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1667.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:17.0) Gecko/20100101 Firefox/17.0.6',
+        'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/28.0.1468.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 5.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2224.3 Safari/537.36',
+        'Mozilla/5.0 (X11; CrOS i686 3912.101.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/27.0.1453.116 Safari/537.36']
+    UserAgent = {'User-Agent': random.choice(user_agent_list)}
+    return UserAgent
+
+class DataFromCFFEX:
+
+    # define the attributes
+    def __init__(self, date, Saveurl):
+        self.date = date;  # "2014/05/23"
+        self.url="http://www.cffex.com.cn/sj/hqsj/rtj/"+self.date[0:4]+self.date[5:7]+"/"+self.date[-2:]+"/"+"index.xml";
+        self.Data = {}
+        self.Saveurl = Saveurl
+
+    def parse_url(self):
+        user_agent = UserAgent()
+        resp = requests.get(self.url,headers = user_agent)
+        return resp.content.decode()
+
+    def handle_data(self):
+        MyPage = self.parse_url()
+        # print(MyPage);
+        Pattern = re.compile(r"<dailydata>(.*?)</dailydata>", re.DOTALL)
+        Iterms = Pattern.findall(MyPage)
+        if not Iterms:
+            print("Get the page successfully!!")
+        for Iterm in Iterms:
+            Pattern = re.compile(r"<instrumentid>(.*?)</instrumentid>")
+            Contracts = Pattern.findall(Iterm)
+            Pattern = re.compile(r"<tradingday>(.*?)</tradingday>")
+            TradingDay = Pattern.findall(Iterm)
+            TradingDay = datetime.datetime(int(TradingDay[0][0:4]), int(TradingDay[0][4:6]), int(TradingDay[0][-2:]))
+            Pattern = re.compile(r"<openprice>(.*?)</openprice>")
+            Open = Pattern.findall(Iterm)
+            if Open[0] == "":
+                continue
+            Open = float(Open[0])
+            Pattern = re.compile(r"<highestprice>(.*?)</highestprice>")
+            High = Pattern.findall(Iterm)
+            High = float(High[0])
+            Pattern = re.compile(r"<lowestprice>(.*?)</lowestprice>")
+            Low = Pattern.findall(Iterm)
+            Low = float(Low[0])
+            Pattern = re.compile(r"<closeprice>(.*?)</closeprice>")
+            Close = Pattern.findall(Iterm)
+            Close = float(Close[0])
+            Pattern = re.compile(r"<openinterest>(.*?)</openinterest>")
+            OpenInt = Pattern.findall(Iterm)
+            OpenInt = float(OpenInt[0])
+            Pattern = re.compile(r"<settlementprice>(.*?)</settlementprice>")
+            Settlement = Pattern.findall(Iterm)
+            Settlement = float(Settlement[0])
+            Pattern = re.compile(r"<presettlementprice>(.*?)</presettlementprice>")
+            PreSettlement = Pattern.findall(Iterm)
+            PreSettlement = float(PreSettlement[0])
+            Pattern = re.compile(r"<volume>(.*?)</volume>")
+            Volume = Pattern.findall(Iterm)
+            Volume = float(Volume[0])
+            Pattern = re.compile(r"<turnover>(.*?)</turnover>")
+            Turnover = Pattern.findall(Iterm)
+            Turnover = float(Turnover[0])
+            key = str(Contracts[0]).strip()
+            Symbol = key[0:2]
+            # print(key)
+            Values = [Symbol, TradingDay, Open, High, Low, Close, OpenInt, Settlement, PreSettlement, Volume, Turnover]
+            # print(Values)
+            self.Data.setdefault(key, Values)
+
+    def InsertDataToDB(self):
+        self.handle_data();
+        conna=sqlite3.connect(self.Saveurl);
+        #if conna:
+        #    print("database is successfully connected");
+        cursor=conna.cursor();
+        SQLquery1="create table if not exists CFFEX(Contracts varchar(20),Symbol nvarchar(20),date datetime,Open numeric(15,2),High numeric(15,2),\
+                  Low numeric(15,2),Close numeric(15,2),OpenInt numeric(25,2),Settlement numeric(15,2),PreSettlement numeric(15,2),\
+                  Volume numeric(25,2),Turnover numeric(30,5))";
+        cursor.execute(SQLquery1);
+        for key,value in self.Data.items():
+            Iter=(key,value[0],value[1],value[2],value[3],value[4],value[5],value[6],value[7],value[8],value[9],value[10]);
+            #print(Iter);
+            SQLquery2="insert into CFFEX"+" "+"values(?,?,?,?,?,?,?,?,?,?,?,?)";
+            cursor.execute(SQLquery2,Iter);
+        conna.commit();
+        conna.close();
+
+if __name__ == '__main__':
+    test = DataFromCFFEX('2020-05-21','Future.db')
+    test.InsertDataToDB()
+
+
+
+
+#最后的出来的结果如果要读取为Dataframe
+
+'''
+import pandas as pd
+conna=sqlite3.connect('Future.db')
+cursor = conna.cursor()
+sql = """select * from CFFEX"""
+cursor.execute(sql)
+result = cursor.fetchall()
+df = pd.DataFrame(result)
+df.columns = ......     #参见上面sql，懒得写了
+'''
+
